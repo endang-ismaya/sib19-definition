@@ -1,0 +1,218 @@
+#!/bin/bash
+
+# //////////////////////////////////////////////////////////////////////// #
+# Application Name	: sibnineteen
+# Version						: v.1.0.2
+# Author 						: endang.ismaya@gmail.com
+# Date 							: June 04, 2015
+# Location 					: SanFrancisco, Indonesia
+# Comment						:	Create scripts for SIB19 Check
+#	History						: v.1.0.2
+#										: * adding csfallbackrelease
+#										:	* move csfallbackrelease from top to bottom
+#										: * create option for definition only
+# //////////////////////////////////////////////////////////////////////// #
+
+## Usage Function to send the information how to use the tool
+
+usage()
+{
+	cat <<END
+Usage : $0 [-r RNC] [-c CELL] [-f FREQUENCY]
+
+ -r : RNC Name
+ -c : List of Cell separated by comma (,)
+ -f : List of Frequency separated by comma (,)
+ -d : DefinitionOnly is active
+ -h : show this help message
+ -v : show this tool version
+ 
+Examples:
+ 
+ $0 -r RNC_A -c CellA,CellB,CellC -f 2200,750,5780
+ $0	-r RNC_A -c CellA,CEllB,CellC -f 2200 -d
+ 
+END
+}
+
+showversion()
+{
+cat <<END
+# /////////////////////////////////// #
+# Application Name  : sibnineteen
+# Version           : v.1.0.2
+# /////////////////////////////////// #
+
+END
+}
+
+## error catch
+error ()
+{
+	## echo "Error: $1"
+	printf '\e[1;31m%s\e[0m\n\n' "Error: $1"
+	usage
+	exit $2
+} >&2
+
+## drawline function
+drawline ()
+{
+
+dt=`date '+%m/%d/%Y %H:%M:%S'`
+	
+	len="${#1} + 26"
+	
+	declare line=""
+	declare char="-"
+	for (( i=0; i<$len ; i++ )); do
+		line="${line}${char}"
+	done
+	printf "%s\n" "$line"
+	
+	printf '| \e[1;32m%s : %s\e[0m |\n' "$1" "$dt"
+	
+	line=""
+	char="-"
+	for (( i=0; i<$len ; i++ )); do
+		line="${line}${char}"
+	done
+	printf "%s\n" "$line"
+	
+}
+
+## drawline function
+drawline2 ()
+{
+dt="->"
+	len="${#1} + 4"
+	
+	declare line=""
+	declare char="-"
+	for (( i=0; i<$len ; i++ )); do
+		line="${line}${char}"
+	done
+	printf "%s\n" "$line"
+	
+	printf '| \e[1;33m%s\e[0m |\n' "$1"
+	
+	line=""
+	char="-"
+	for (( i=0; i<$len ; i++ )); do
+		line="${line}${char}"
+	done
+	printf "%s\n" "$line"
+}
+
+##// checking if no argument (filename)
+[[ $# -lt 1 ]] && { printf '\e[1;31m%s\e[0m\n\n' "Missing an argument." >&2; usage ; exit 1; }
+
+while getopts ":r:c:f:dvh" opt; do
+	case $opt in
+		r)
+			RNCOPT="${OPTARG}"
+			;;
+		h)
+			usage
+			exit 0
+			;;
+		v)
+			showversion
+			exit 0
+			;;
+		c)
+			CELLOPT="${OPTARG}"
+			;;
+		f)
+			FREQOPT="${OPTARG}"
+			;;
+		d)
+			DEFINTION="YES"
+			;;
+		:)
+			error "Option -${OPTARG} is missing an argument" 2
+			;;
+		\?)
+			error "Unknown option: -${OPTARG}" 3 
+			;;
+ 
+ 	esac
+done   
+
+shift $((OPTIND -1))
+
+## variable declaration
+RNC_NAME=${RNCOPT}
+IFS=',' read -a arrays <<< "$CELLOPT"
+
+if [[ ${#arrays[@]} -gt 1 ]]; then
+	CELL_LIST=${CELLOPT//","/"|"}
+	CELL_LIST="(${CELL_LIST})"
+else
+	CELL_LIST=${CELLOPT}
+fi
+FREQ_LIST=${FREQOPT}
+CMD_FILE="getsib19"
+dt=`date '+%m%d%Y_%H%M%S'`
+LOG_FILE="${RNC_NAME}_SIB19_${dt}.log"
+##----------------------------------------------------------
+
+## processing sign
+drawline "Start "
+##-----------------
+
+## echo ${#distro[@]} 
+
+if [[ -e $CMD_FILE ]]; then
+	rm ${CMD_FILE} >&2
+fi
+if [[ -e $LOG_FILE ]]; then
+	rm ${LOG_FILE} >&2
+fi
+
+echo ""
+printf '\e[1;34m%s\e[0m\n' "RNC 			: ${RNC_NAME}"
+printf '\e[1;34m%s\e[0m\n' "CELL 			: ${CELL_LIST}"
+printf '\e[1;34m%s\e[0m\n' "ORIGINAL LOGFILE 		: ${LOG_FILE}"
+## printf '\e[1;34m%s\e[0m\n' "DELETE COMMAND		: del_${RNC_NAME}_${DELCELL_LIST}_\$DATE.mos"
+## printf '\e[1;34m%s\e[0m\n' "INTRA / INTER RNC DATA	: INTRA_INTER_${RNC_NAME}_UtranRelation_\$DATE.csv"
+echo ""
+##echo "l+ ${LOG_FILE}" > ${CMD_FILE}
+echo "l+mm" >> ${CMD_FILE}
+echo "lt all" >> ${CMD_FILE}
+echo "st UtranCell=${CELL_LIST}" >> ${CMD_FILE}
+echo "lget UtranCell=${CELL_LIST}.*EutranFreq redirectionOrder|cellReselectionPriority|threshHigh|qRxLevMin|threshLow" >> ${CMD_FILE}
+echo "lhget UtranCell=${CELL_LIST} releaseRedirectEutraTriggers@csFallbackCsRelease" >> ${CMD_FILE}
+echo "l-" >> ${CMD_FILE}
+echo "l cat \$logfile > ${LOG_FILE} " >> ${CMD_FILE}
+## echo "l java -cp /home/dd622f/newSRT/SIB19 SIB19Check \$logfile $FREQ_LIST" >> ${CMD_FILE}
+
+## echo "COMMANDS 		: "
+## cat ${CMD_FILE}
+## listme file
+## login into sourceRNC
+drawline "${RNC_NAME}"
+printf '\e[1;33m%s\e[0m\n' "login into ${RNC_NAME}..."
+echo ""
+amos ${RNC_NAME} 'run getsib19;q'
+## echo "java -cp /home/dd622f/endang/SIB19 SIB19Check ${LOG_FILE} $FREQ_LIST"
+
+if [[ $DEFINTION ]] ; then
+	
+	java -cp /home/dd622f/endang/SIB19 SIB19CheckDefinition ${LOG_FILE} $FREQ_LIST
+	
+else
+	
+	java -cp /home/dd622f/endang/SIB19 SIB19Check ${LOG_FILE} $FREQ_LIST
+	
+	# csFallbackCsRelease information
+	echo ""
+	drawline2 "csFallbackCsRelease "
+	egrep '^UtranCell=|csFallbackCsRelease' ${LOG_FILE} | egrep -iv 'EutranFreqRelation|lhget'
+	
+	## processing sign
+	drawline "Completed "
+	##-------------------
+fi
+
+exit 0

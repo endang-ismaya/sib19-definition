@@ -1,0 +1,179 @@
+#!/bin/bash
+
+# //////////////////////////////////////////////////////////////////////// #
+# Application Name	: sibnineteen
+# Version						: v.1.0.1
+# Author 						: endang.ismaya@gmail.com
+# Date 							: June 04, 2015
+# Location 					: SanFrancisco, Indonesia
+# Comment						:	Create scripts for SIB19 Check
+#	History						: v.1.0.1
+#										: * adding csfallbackrelease
+# //////////////////////////////////////////////////////////////////////// #
+
+## Usage Function to send the information how to use the tool
+
+usage()
+{
+	cat <<END
+Usage : ./sibnineteen.sh [-r RNC] [-c CELL] [-f FREQUENCY]
+
+ -r : RNC Name
+ -c : List of Cell separated by comma (,)
+ -f : List of Frequency separated by comma (,)
+ -h : show this help message
+ -v : show this tool version
+ 
+Examples:
+ 
+ ./sibnineteen -r RNC_A -c CellA,CellB,CellC -f 2200,750,5780
+ 
+END
+}
+
+showversion()
+{
+cat <<END
+
+# //// #
+# Application Name  : sibnineteen.sh
+# Version           : v.1.0.0
+# //// #
+
+END
+}
+
+## error catch
+error ()
+{
+	## echo "Error: $1"
+	printf '\e[1;31m%s\e[0m\n\n' "Error: $1"
+	usage
+	exit $2
+} >&2
+
+## drawline function
+drawline ()
+{
+
+dt=`date '+%m/%d/%Y %H:%M:%S'`
+	
+	len="${#1} + 26"
+	
+	declare line=""
+	declare char="-"
+	for (( i=0; i<$len ; i++ )); do
+		line="${line}${char}"
+	done
+	printf "%s\n" "$line"
+	
+	printf '| \e[1;32m%s : %s\e[0m |\n' "$1" "$dt"
+	
+	line=""
+	char="-"
+	for (( i=0; i<$len ; i++ )); do
+		line="${line}${char}"
+	done
+	printf "%s\n" "$line"
+	
+}
+
+##// checking if no argument (filename)
+[[ $# -lt 1 ]] && { printf '\e[1;31m%s\e[0m\n\n' "Missing an argument." >&2; usage ; exit 1; }
+
+while getopts ":r:c:f:vh" opt; do
+	case $opt in
+		r)
+			RNCOPT="${OPTARG}"
+			;;
+		h)
+			usage
+			exit 0
+			;;
+		v)
+			showversion
+			exit 0
+			;;
+		c)
+			CELLOPT="${OPTARG}"
+			;;
+		f)
+			FREQOPT="${OPTARG}"
+			;;
+		:)
+			error "Option -${OPTARG} is missing an argument" 2
+			;;
+		\?)
+			error "Unknown option: -${OPTARG}" 3 
+			;;
+ 
+ 	esac
+ 	
+done   
+
+shift $((OPTIND -1))
+
+## variable declaration
+RNC_NAME=${RNCOPT}
+IFS=',' read -a arrays <<< "$CELLOPT"
+
+if [[ ${#arrays[@]} -gt 1 ]]; then
+	CELL_LIST=${CELLOPT//","/"|"}
+	CELL_LIST="(${CELL_LIST})"
+else
+	CELL_LIST=${CELLOPT}
+fi
+FREQ_LIST=${FREQOPT}
+CMD_FILE="getsib19"
+dt=`date '+%m%d%Y_%H%M%S'`
+LOG_FILE="${RNC_NAME}_SIB19_${dt}.log"
+##----------------------------------------------------------
+
+## processing sign
+drawline "Start "
+##-----------------
+
+echo ${#distro[@]} 
+
+if [[ -e $CMD_FILE ]]; then
+	rm ${CMD_FILE} >&2
+fi
+if [[ -e $LOG_FILE ]]; then
+	rm ${LOG_FILE} >&2
+fi
+
+echo ""
+printf '\e[1;34m%s\e[0m\n' "RNC 			: ${RNC_NAME}"
+printf '\e[1;34m%s\e[0m\n' "CELL 			: ${CELL_LIST}"
+printf '\e[1;34m%s\e[0m\n' "ORIGINAL LOGFILE 	: ${LOG_FILE}"
+## printf '\e[1;34m%s\e[0m\n' "DELETE COMMAND		: del_${RNC_NAME}_${DELCELL_LIST}_\$DATE.mos"
+## printf '\e[1;34m%s\e[0m\n' "INTRA / INTER RNC DATA	: INTRA_INTER_${RNC_NAME}_UtranRelation_\$DATE.csv"
+echo ""
+##echo "l+ ${LOG_FILE}" > ${CMD_FILE}
+echo "l+mm" >> ${CMD_FILE}
+echo "lt all" >> ${CMD_FILE}
+echo "st UtranCell=${CELL_LIST}" >> ${CMD_FILE}
+echo "lget UtranCell=${CELL_LIST}.*EutranFreq redirectionOrder|cellReselectionPriority|threshHigh|qRxLevMin|threshLow" >> ${CMD_FILE}
+echo "lhget UtranCell=${CELL_LIST} releaseRedirectEutraTriggers@csFallbackCsRelease" >> ${CMD_FILE}
+echo "l-" >> ${CMD_FILE}
+echo "l cat \$logfile > ${LOG_FILE} " >> ${CMD_FILE}
+## echo "l java -cp /home/dd622f/newSRT/SIB19 SIB19Check \$logfile $FREQ_LIST" >> ${CMD_FILE}
+
+## echo "COMMANDS 		: "
+## cat ${CMD_FILE}
+## listme file
+## login into sourceRNC
+drawline "${RNC_NAME}"
+printf '\e[1;33m%s\e[0m\n' "login into ${RNC_NAME}..."
+echo ""
+amos ${RNC_NAME} 'run getsib19;q'
+## echo "java -cp /home/dd622f/endang/SIB19 SIB19Check ${LOG_FILE} $FREQ_LIST"
+egrep '^UtranCell=|csFallbackCsRelease' ${LOG_FILE} | egrep -iv 'EutranFreqRelation|lhget'
+echo ""
+java -cp /home/dd622f/endang/SIB19 SIB19Check ${LOG_FILE} $FREQ_LIST
+
+echo ""
+echo ""
+## processing sign
+drawline "Completed "
+##-------------------
